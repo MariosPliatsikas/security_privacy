@@ -1,3 +1,6 @@
+from flask_wtf.csrf import CSRFProtect
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField
 from flask import Flask, render_template, request, redirect, url_for, abort
 from flask_sqlalchemy import SQLAlchemy 
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -8,6 +11,8 @@ from flask_mail import Mail, Message
 import os
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'  # Make sure to replace with a secure secret key
+csrf = CSRFProtect(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
 app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['MAIL_SERVER'] = 'your-mail-server'
@@ -20,6 +25,7 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 mail = Mail(app)
 s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
         
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -28,6 +34,11 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(120))
     email_verified = db.Column(db.Boolean, default=False)
     role = db.Column(db.String(80), default='user')
+
+class LoginForm(FlaskForm):
+    username = StringField('Username')
+    password = PasswordField('Password')
+    submit = SubmitField('Login')
         
 @login_manager.user_loader
 def load_user(user_id):
@@ -86,14 +97,17 @@ def confirm_email(token):
         
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = User.query.filter_by(username=username).first()
+    form = LoginForm()
+    if form.validate_on_submit():
+        # process the form data
         if user and check_password_hash(user.password, password):
             login_user(user)
             return redirect(url_for('home'))
-    return render_template('login.html') 
+        else:
+            flash('Invalid username or password')
+            return redirect(url_for('login'))
+    # if the form is not submitted or not valid, render the login page
+    return render_template('login.html', form=form)
     
 @app.route('/logout')
 @login_required
